@@ -1,0 +1,310 @@
+<!doctype html>
+<html><head><title>Scorecard: New</title>
+<link rel="stylesheet" href="scorecard.css">
+<script src="common.js"></script>
+<script type="text/javascript">DATABASE = ($.query.get('db') || 'Direct');</script>
+</head><body>
+<div class="headerbar blackbar">
+    <div class="container_12">
+        <div class="grid_12">
+            <a href="" class="view_link"><h1 class="logo"></h1></a>
+            <div class="caption">
+                <a class="button view_link" href=""><span>View data</span></a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container_12 form">
+    <form>
+    <div class="grid_8">
+        <table>
+            <tr><td class="number"></td><td class="question"><h2>Basic information</h2></td><td class="values"></td><td class="score"></td></tr>
+            <tr><td class="number"></td><td class="question required">Your user ID</td><td class="values"><input name="user_id" id="user_id" class="required"></input></td><td class="score"></td></tr>
+            <tr><td class="number"></td><td class="question required">Order number</td><td class="values"><input name="order" id="order" class="required"></input><div id="duplicate_order"><a target="_blank" href="">Duplicate</a></div></td><td class="score"></td></tr>
+        </table>
+        <div class="mainform"><img src="loading-big.gif" alt="Loading..."></div>
+        <table>
+            <tr><td colspan="2"><h2>Comments</h2>
+                <span class="section_description">Pick a comment from below. If none is applicable, type your own comment in.</span>
+                <select id="reason">
+                    <option></option>
+                    <option>Customer denies / cancels order</option>
+                    <option>Customer genuine - confirmed business order</option>
+                    <option>Customer genuine - answered all questions</option>
+                    <option>Customer genuine - has good order / clubcard history</option>
+                    <option>Customer genuine - ordering to relative / friend's house</option>
+                    <option>Customer genuine - answered all questions</option>
+                    <option>Customer genuine – previous orders cancelled by bank / bulk buy policy</option>
+                    <option>Customer not contactable</option>
+                    <option>Customer reluctant in providing the information</option>
+                    <option>Customer sounded suspicious</option>
+                    <option>Distance factor</option>
+                    <option>High risk products ordered</option>
+                    <option>No attributes to link customer to address (no order history / AVS match/ 192 / E.Roll)</option>
+                    <option>No clubcard information</option>
+                    <option>Order exceeds fraud / bulk buy policy</option>
+                    <option>Previous known fraud pattern / adverse order history</option>
+                </select>
+                <textarea name="comments" id="comments" rows="5" cols="60"></textarea>
+                <div id="history"></div>
+            </td></tr>
+        </table>
+    </div>
+    <div class="grid_4 results">
+        <table>
+            <tr><td class="output"><h2>Results</h2></td><td class="values"></td></tr>
+            <tr><td class="output">Score</td><td class="values"><input name="score" id="score" disabled="disabled"></input></td></tr>
+            <tr><td class="output">Recommendation</td><td class="values"><input name="recommendation" id="recommendation" disabled="disabled"></input></td></tr>
+            <tr><td class="output">Your decision</td><td class="values"><select name="decision" id="decision"><option></option><option value="Accept">Accept</option><option value="Reject">Reject</option></select></td></tr>
+        </table>
+        <button type="submit">Save</button>
+        <div id="validation_error">The fields marked in red must be filled in.</div>
+        <div id="server_error"><p>Something went wrong with the server.</p><p>Tell technical support what you did, and that the server said: <span class="message"></span></p></div>
+        <div id="server_success">This scorecard has been saved with ID <span class="message"></span>.<br>You can continue editing this form, or<br><a href="" class="form_link">Start another fraud screening</a><br><a href="" class="view_link">View the latest records</a></div>
+        <table><tr><td><h2>Help</h2></td></tr>
+            <tr><td>
+            <p>If you save this form now, the time spent will be recorded as <span id="time_taken"></span></p>
+            <p>If you've part-filled the form, you can save it and come back to it later.</p>
+            <p>Click on questions to see more help about the questions (if available).</p>
+            </td></tr>
+        </table>
+    </div>
+    <input type="hidden" name="id" id="id"></input>
+    <input type="hidden" name="start_time" id="start_time"></input>
+    </form>
+</div>
+<p class="revision">$Revision: 80 $</p>
+
+<script type="text/javascript">
+$('.view_link').attr('href', '/view.html?db=' + DATABASE + '&orderby=-end_time');
+$('.form_link').attr('href', '/form.html?db=' + DATABASE);
+$('h1').text(DATABASE);
+$('.blackbar').addClass(DATABASE);
+
+function inituser() {
+    // Get all cookies
+    for (var pairs = document.cookie.split(/\s*;\s*/), l=pairs.length, i=0, cookie={}; i<l; i++) {
+        var pair = unescape(pairs[i]).split(/\s*=\s*/);
+        cookie[pair[0]] = pair[1];
+    }
+    
+    var username = cookie.username;
+    // If username wasn't stored there, try and get it from ActiveX and store it
+    if (!username) {
+        try { 
+            var wsn = new ActiveXObject("WScript.Network"); 
+            if (wsn && wsn.UserName) {
+                username = wsn.UserName;
+                document.cookie = 'username=' + escape(username) + '; path=/';
+            }
+        } catch(e) { }
+    }
+
+    // If we found the username...
+    if (username) { 
+        $('#user_id')
+            .data('current_user', username)         // store it
+            .val($('#user_id').val() || username)   // display it if the form's just been created
+            .attr('disabled', 'disabled');          // and user can't edit it any more
+    }
+}
+
+// Validation and recommendation logic
+function validate() {
+    for (var score=0, answers={}, i=0, q; q = questions[i]; i++) {
+        if (!q.question) { continue; }          // Ignore sections
+        var qel = $('#' + q.number),
+            tr = qel.parents('tr:first'),
+            val = qel.val(),
+            num = 0;
+        // Check if the question should be displayed
+        if (q.showif) {
+            if (typeof q.showif == 'string') {
+                var c = q.showif.split('='),
+                    match = $('#Q' + c[0]).val() == c[1];
+            }
+            else if (typeof q.showif == 'function') {
+                match = q.showif();
+            }
+            if (match) { tr.removeClass('hidden'); }
+            if (!match) { tr.addClass('hidden').find('input,select,textarea').val(''); }
+        }
+        // Add the score if the question has not been hidden
+        if (q.showif ? match : 1) {
+            num = (q.values ? q.values[val] : +val) || 0;
+            $('td.score', tr).text(num || "");
+            score += num;
+        }
+        answers[q.number] = [val, num];     // Add to the answers.
+    }
+    $('#score').val(score);
+
+    if      (score <= uncertain_range[0]) { $('body').attr('class', '').addClass('accept'); $('#recommendation').val('Accept'); }
+    else if (score <= uncertain_range[1]) { $('body').attr('class', '').addClass('borderline_accept'); $('#recommendation').val('Borderline accept'); }
+    else if (score <= uncertain_range[2]) { $('body').attr('class', '').addClass('borderline_reject'); $('#recommendation').val('Borderline reject'); }
+    else                                  { $('body').attr('class', '').addClass('reject'); $('#recommendation').val('Reject'); }
+    $('#reason').change(function() { $('#comments').val($(this).val()); });
+    
+    return answers;
+}
+
+function showtime() {
+    var min = Math.round(((new Date()).getTime() - $('#start_time').val()) / 60000),
+        m = min % 60,
+        h = ((min - m) / 60) % 24,
+        d = (min - m - h * 24);
+    if (m < 10) { m = '0' + m; }
+    if (h < 10) { h = '0' + h; }
+    $('#time_taken').text(h + 'h ' + m + 'm');
+}
+
+$.getScript('/questions-' + ($.query.get('db') || 'Direct') + '.js', function() {
+    // Initialise the form
+    for (var html=['<table>'], i=0, q; q = questions[i]; i++) { (function() {   // Ensure that this for loop in in a function -- we're creating functions inside.
+        q.number = 'Q' + q.number;              // This is required to ensure persevere doesn't confuse {'11':...} with arrays
+        if (typeof q.required !== 'function') { // Ensure that q.required is a function
+            var x = q.required; q.required = function() { return x; }
+        }
+        if (q.section) {
+            html.push('<tr><td class="number">', q.number, '</td><td colspan="3" class="question"><h2>', q.section, '</h2><span class="section_description">', q.description, '</span></td><tr>');
+        }
+        if (q.question) {
+            q.cls = q.required() ? "required" : "";
+            html.push('<tr><td class="number">', q.number, '</td><td class="question ', q.cls, '">', q.question, q.help ? ' &raquo;<div class="help_note">' + q.help + '</div>' : '', '</td><td class="values">');
+            if (typeof q.values == 'object') {
+                html.push('<select id="', q.number, '" class="', q.cls, '"><option></option>');
+                for (var val in q.values) { html.push('<option value="', val, '">', val, '</option>'); }
+                html.push('</select>');
+            } else {
+                html.push('<input name="', q.number, '" id="', q.number, '" class="', q.cls, '"></input>');
+            }
+            html.push('</td><td class="score"></td></tr>');
+        }
+    })()}
+    html.push('</table>');
+    $('.mainform').html(html.join(''));
+    $('input[disabled],select[disabled]').addClass('disabled'); // Grey out disabled elements
+    $('.help_note').parent().click(function() { $('.help_note', this).toggle(); }).css('cursor', 'help');
+
+    // Focus change logic
+    $('td input, td select').focus(function() { $(this).parents('tr:first').addClass('highlight');    })
+                            .blur (function() { $(this).parents('tr:first').removeClass('highlight'); })
+                            .change(validate);
+
+    // Check duplicate orders
+    $('#order').blur(function() {
+        var order = $('#order').val();
+        if (order) {
+            $.ajax({type: 'GET', url: '/' + DATABASE + '/?order="' + order + '"', dataType: 'json', success: function(data) {
+                if (data.length && data[0].id != $('#id').val()) {
+                    $('#duplicate_order').show();
+                    $('#duplicate_order a').attr('href', '/view.html?db=' + DATABASE + '&order=' + order);
+                } else {
+                    $('#duplicate_order').hide();
+                }
+            }});
+        }
+    });
+
+    // Form submission logic
+    $('form').submit(function() {
+        var error = 0,
+            answers = validate();
+
+        // order and user_id should be present
+        if (!$('#order').val()) { $('#order').addClass('error'); error++; } else { $('#order').removeClass('error'); }
+        if (!$('#user_id').val()) { $('#user_id').addClass('error'); error++; } else { $('#user_id').removeClass('error'); }
+
+        // If a decision has been made, validate answers
+        if ($('#decision').val()) {
+            for (var i=0, q; q=questions[i]; i++) {
+                var qel = $('#' + q.number);
+                if (q.required() && !qel.parents('tr').is('.hidden') && !qel.val()) { qel.addClass('error'); error++; }
+                else { qel.removeClass('error'); }
+            }
+
+            // Make a decision, and provide
+            if (($('#decision').val() != $('#recommendation').val()) && !$('#comments').val()) { $('#comments').addClass('error'); error++; } else { $('#comments').removeClass('error'); }
+        }
+
+        $('#validation_error,#server_error,#server_success').hide();
+        if (error) {
+            $('#validation_error').slideDown(200);
+        } else {
+            var now = new Date(),
+                original = $('form').data('original'),
+                username = $('#user_id').data('current_user') || $('#user_id').val()
+                newdata = {
+                    'user_id': username,
+                    'order': $('#order').val(),
+                    'start_time': +$('#start_time').val(),
+                    'end_time': now.getTime(),
+                    'decision': $('#decision').val() || '',
+                    'recommendation': $('#recommendation').val() || '',
+                    'score': +$('#score').val(),
+                    'comments': $('#comments').val(),
+                    'answers': answers
+                };
+            // Compute changes to form
+            var hist = $('#history').append('<p>' + username + ' (' + now.toLocaleString() + '):</p><ul></ul>').find('ul:last');
+            if (original) {
+                for (var fields=['order', 'decision'], i=0, field; field=fields[i]; i++) {
+                    if (newdata[field] !== original[field]) {
+                        hist.append('<li>' + field + ': ' + $('#' + field).val() + ' <strike>' + original[field] + '</strike></li>');
+                    }
+                }
+                for (var ans in newdata.answers) {
+                    if (!newdata.answers[ans][0]) { continue; }
+                    if (original.answers[ans]) {
+                        if (newdata.answers[ans][0] !== original.answers[ans][0]) {
+                            hist.append('<li>' + ans + ': ' + newdata.answers[ans][0] + ' <strike>' + original.answers[ans][0] + '</strike></li>');
+                        } 
+                    } else {
+                        hist.append('<li>' + ans + ': ' + newdata.answers[ans][0] + '</li>');
+                    }
+                }
+            } else {
+                hist.append('<li>Created</li>');
+            }
+            // Store the history
+            newdata.history = $('#history').html();
+            $('form').data('original', newdata);
+            
+            // Save it
+            $.ajax({type:'POST', url: '/' + DATABASE + '/' + $('#id').val(), dataType: 'json', data:JSON.stringify(newdata), success: function(data) {
+                $('#server_success .message').text(data.id);
+                $('#id').val(data.id);
+                $('#server_success').slideDown(200);
+            }, error: function(xhr) {
+                $('#server_error .message').html(xhr.responseText);
+                $('#server_error').slideDown(200);
+            }});
+        }
+        return false;
+    });
+
+    // Initialise the form if an ID is provided
+    if ($.query.get('id')) {
+        $.ajax({type: 'GET', url: '/' + DATABASE + '/' + $.query.get('id'), dataType: 'json', success: function(data) {
+            $('form').data('original', data);   // Store the original order data, to capture history
+            for (var key in data) { $('#' + key).val(data[key]); }
+            $('#history').html(data.history);
+            for (var q in data.answers) { $('#' + q).val(data.answers[q][0]); }
+            validate();
+            inituser();
+            showtime(); setInterval(showtime, 60000);
+        }});
+    } else {
+        $('#start_time').val((new Date()).getTime());   // Reset the clock now
+        validate();
+        inituser();
+        showtime(); setInterval(showtime, 60000);
+        // Focus on the first element only if the form is being created. Otherwise, it may just be viewing
+        $('input,select,textarea').filter(':not([disabled]):eq(0)').focus();
+    }
+});
+
+</script>
+
+</body></html>
