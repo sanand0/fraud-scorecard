@@ -1,0 +1,111 @@
+<!doctype html>
+<html><head><title>Scorecard: View data</title>
+<link rel="stylesheet" href="scorecard.css">
+<script src="common.js"></script>
+<script type="text/javascript">DATABASE = ($.query.get('db') || 'Direct');</script>
+</head><body>
+<div class="headerbar blackbar">
+    <div class="container_12">
+        <div class="grid_12">
+            <a href="" class="view_link"><h1 class="logo"></h1></a>
+            <div class="caption">
+                <a class="button form_link" href=""><span>Start fraud screening</span></a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container_12">
+    <div class="help">
+        You can search by typing in the boxes below and clicking the "Filter" button.
+        <br>You can search for scores less than 400 by typing &quot;&lt;400&quot; in the Score column filter.
+        <br>You can sort by clicking on the column headings. Click again to sort in the opposite direction.
+        <br>This page shows only the first 200 results. Click the "Export to Excel" button at the bottom to get the full list.
+    </div>
+    <div class="grid_12 view"><img src="loading-big.gif" alt="Loading..."></div>
+    <div class="grid_12">
+        <div id="server_error"><p>Something went wrong with the server.</p><p>Tell technical support what you did, and that the server said: <span class="message"></span></p></div>
+        <div class="actions"><a class="button export" href=""><span>Export to Excel</span></a></div>
+    </div>
+</div>
+<p class="revision">$Revision: 79 $</p>
+
+<script type="text/javascript">
+$('.view_link').attr('href', '/view.html?db=' + DATABASE + '&orderby=-end_time');
+$('.form_link').attr('href', '/form.html?db=' + DATABASE);
+$('h1').text(DATABASE);
+$('.blackbar').addClass(DATABASE);
+
+// Convert the URL into a JSONPath query
+function _str(key)  { var v = $.query.keys[key]; return (v && v !== true) ? '[?' + key + '="' + v + '"]' : ''; }
+function _date(key) { var v = $.query.keys[key]; return (v && v !== true) ? '[?' + key + '>' + Date.fromString(v).getTime() + ']' : ''; }
+function _sort(key) { var v = $.query.keys[key] || '-end_time'; return (v && v !== true) ? (v.substr(0,1) == '-' ? '[%5C' + v.substr(1) : '[/' + v) + ']' : ''; }
+function _num(key)  { var v = $.query.keys[key]; return (typeof v == 'number') ? '[?' + key + '=' + v + ']' :
+                                                        (typeof v == 'string') ? '[?' + key + v + ']' : ''; }
+var query = [ _num('id'), _str('user_id'), _str('order'), _str('decision'), _str('recommendation'), _num('score'), _date('end_time'), _str('comments'), _sort('orderby')].join('');
+
+// Run the query and display results
+$.ajax({type: 'GET', url: '/' + DATABASE + '/' + query + '.slice(0,200)', dataType: 'json', success: function(data) {
+    var $view = $('.view').html(['<form action="/view.html" method="get"><table><tr><th orderby="id">ID</th><th orderby="user_id">User</th><th orderby="order">Order</th><th orderby="decision">Decision</th><th orderby="recommendation">Recommendation</th><th orderby="score">Score</th><th orderby="comments">Comments</th><th orderby="end_time">Updated</th></tr><tr class="filter">',
+        '<td><input name="id" id="id"></td>',
+        '<td><input name="user_id" id="user_id"></td>',
+        '<td><input name="order" id="order"></td>',
+        '<td><input name="decision" id="decision"></td>',
+        '<td><input name="recommendation" id="recommendation"></td>',
+        '<td><input name="score" id="score"></td>',
+        '<td><input name="comments" id="comments"></td>',
+        '<td><input name="end_time" id="end_time"></td>',
+        '<td><input type="hidden" name="orderby" id="orderby"></input><input type="hidden" name="db" id="db" value="' + DATABASE + '"></input><button type="submit">Filter</button> <a class="help_link" href="#">Help</a></td></tr></table></form>'
+        ].join('')).find('table');
+    for (var i=0, row; row=data[i]; i++) {
+        $view.append($('<tr></tr>').attr('data', row.id)
+            .append($('<td></td>').text(row.id))
+            .append($('<td></td>').text(row.user_id))
+            .append($('<td></td>').text(row.order))
+            .append($('<td></td>').text(row.decision))
+            .append($('<td></td>').text(row.recommendation))
+            .append($('<td></td>').text(row.score))
+            .append($('<td></td>').text(row.comments))
+            .append($('<td></td>').html(prettyDate(new Date(+row.end_time)).replace(/\s/g, '&nbsp;'))));
+    }
+    
+    // Convert the rows / titles into links
+    $('.view tr[data], .view th[orderby]').hover(function() { $(this).addClass('highlight'); }, function() { $(this).removeClass('highlight'); });
+    $('.view tr[data]').click(function() { window.location = '/form.html?db=' + DATABASE + '&id=' + $(this).attr('data'); });
+    
+    // Enable datepicker. Ensure parsing before submit
+	$('#end_time').datePicker({startDate:'01/01/1996'});
+    
+    // Show the filter parameters
+    for (var key in $.query.keys) {
+        if (typeof $.query.keys[key] != 'boolean') {
+            $('#' + key).val($.query.keys[key]).addClass('filtered');
+        }
+    }
+    if ($.query.keys['orderby']) {
+        var orderby = $.query.keys['orderby'], reverse = '';
+        if (typeof orderby == 'string' && orderby.substr(0,1) == '-') { reverse = ' reverse'; orderby = orderby.substr(1); }
+        $('th[orderby=' + orderby + ']').addClass('sorted' + reverse)
+    }
+    $('.export').attr('href', '/csv/' + DATABASE + '/' + query);
+    
+    // Clicking on title sorts
+    $('.view th[orderby]').click(function() {
+        var orderby = $(this).attr('orderby');
+        // Toggle the '-' in front to reverse the sort order, if required
+        if ($('#orderby').val() == orderby) {
+            if (orderby.substr(0,1) == '-') { orderby = orderby.substr(1); }
+            else { orderby = '-' + orderby; }
+        }
+        $('#orderby').val(orderby);
+        $('form').submit();
+    });
+}, error: function(xhr) {
+    $('.view,.actions').hide();
+    $('#server_error .message').html('DATABASE: ' + DATABASE + '. ' + (xhr.responseText || '(no response text)'));
+    $('#server_error').slideDown(200);
+}});
+$('.help_link').live('click', function(e) { e.preventDefault(); $('.help').slideToggle(100); });
+</script>
+
+</body></html>
