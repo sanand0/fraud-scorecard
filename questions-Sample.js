@@ -21,7 +21,7 @@ var questions = [
     {
         "number": 1,
         "section": "Overview Questions",
-        "description": ""
+        "description": "Actual questions are not disclosed -- they're confidential. These are dummy questions. Obviously."
     },
 
     /* This is a question. It has 6 parts.
