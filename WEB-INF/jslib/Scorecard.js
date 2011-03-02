@@ -31,14 +31,14 @@ app = function(env){
             out = ['"Business","ID","User ID","Order","Start time","End time","Time taken","Decision","Recommendation","Overruled","Score","Comments","Paused?"'],
             questions = {},
             qlist = [];
-        
+
         // Get all possible questions
         for (var i=0, e; e=result[i]; i++) {
             for (var q in e.answers) {
                 if (!questions[q]) { questions[q] = 1; qlist.push(q); }
             }
         }
-        
+
         qlist.sort();
         out[0] += ',,' + qlist.join(','); // Add answers header
         out[0] += ',,' + qlist.join(','); // Add scores header
@@ -73,13 +73,30 @@ app = function(env){
             body: out.join('\n')
         };
     }
-    
-    // Redirect the home page to the Direct fraud scorecard. 
+
+    // Redirect the home page to the Direct fraud scorecard.
     else if (url == '/') {
         return {
             status: 302,
             headers: { 'Location': '/view.html?db=Direct' },
             body: '<a href="/view.html?db=Direct">Fraud scorecard</a>'
+        };
+    }
+
+    else if (url.match(/\/clean(\/.*)$/)) {
+        var match = url.match(/\/clean(\/.*)$/),
+            result = load(match[1]),
+            days = 90,
+            before = (new Date()).getTime() - days*24*60*60; /* Only stuff older than 90 days */
+
+        // Remove up to 1000 at a time
+        for (var i=0, e; (i < 1000) && (e=result[i]); i++) {
+          if (e.end_time < before) { remove(e); }
+        }
+        return {
+            status: 200,
+            headers: {'Content-Type':'text/plain' },
+            body: 'Removed ' + i + ' entries older than ' + days + ' days (out of ' + result.length + ' records)'
         };
     }
 
