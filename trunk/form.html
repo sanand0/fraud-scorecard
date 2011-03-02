@@ -74,7 +74,7 @@
     <input type="hidden" name="start_time" id="start_time"></input>
     </form>
 </div>
-<p class="revision">$Revision: 80 $</p>
+<p class="revision">Revision: 27-Apr-2010</p>
 
 <script type="text/javascript">
 $('.view_link').attr('href', '/view.html?db=' + DATABASE + '&orderby=-end_time');
@@ -88,12 +88,12 @@ function inituser() {
         var pair = unescape(pairs[i]).split(/\s*=\s*/);
         cookie[pair[0]] = pair[1];
     }
-    
+
     var username = cookie.username;
     // If username wasn't stored there, try and get it from ActiveX and store it
     if (!username) {
-        try { 
-            var wsn = new ActiveXObject("WScript.Network"); 
+        try {
+            var wsn = new ActiveXObject("WScript.Network");
             if (wsn && wsn.UserName) {
                 username = wsn.UserName;
                 document.cookie = 'username=' + escape(username) + '; path=/';
@@ -102,7 +102,7 @@ function inituser() {
     }
 
     // If we found the username...
-    if (username) { 
+    if (username) {
         $('#user_id')
             .data('current_user', username)         // store it
             .val($('#user_id').val() || username)   // display it if the form's just been created
@@ -145,7 +145,7 @@ function validate() {
     else if (score <= uncertain_range[2]) { $('body').attr('class', '').addClass('borderline_reject'); $('#recommendation').val('Borderline reject'); }
     else                                  { $('body').attr('class', '').addClass('reject'); $('#recommendation').val('Reject'); }
     $('#reason').change(function() { $('#comments').val($(this).val()); });
-    
+
     return answers;
 }
 
@@ -259,7 +259,7 @@ $.getScript('/questions-' + ($.query.get('db') || 'Direct') + '.js', function() 
                     if (original.answers[ans]) {
                         if (newdata.answers[ans][0] !== original.answers[ans][0]) {
                             hist.append('<li>' + ans + ': ' + newdata.answers[ans][0] + ' <strike>' + original.answers[ans][0] + '</strike></li>');
-                        } 
+                        }
                     } else {
                         hist.append('<li>' + ans + ': ' + newdata.answers[ans][0] + '</li>');
                     }
@@ -270,7 +270,7 @@ $.getScript('/questions-' + ($.query.get('db') || 'Direct') + '.js', function() 
             // Store the history
             newdata.history = $('#history').html();
             $('form').data('original', newdata);
-            
+
             // Save it
             $.ajax({type:'POST', url: '/' + DATABASE + '/' + $('#id').val(), dataType: 'json', data:JSON.stringify(newdata), success: function(data) {
                 $('#server_success .message').text(data.id);
@@ -297,6 +297,12 @@ $.getScript('/questions-' + ($.query.get('db') || 'Direct') + '.js', function() 
         }});
     } else {
         $('#start_time').val((new Date()).getTime());   // Reset the clock now
+        // Initialise other user supplied parameters
+        for (var key in $.query.keys) {
+           var el = $('#' + key), val = $.query.get(key);
+           if (el.is('input,select,textarea') && typeof val != "boolean") { el.val(val); }
+        }
+
         validate();
         inituser();
         showtime(); setInterval(showtime, 60000);
